@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Potato AI</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    body { background-color: #18181b; display: flex; justify-content: center; align-items: center; height: 100vh; }
+    .chat-container { width: 100%; max-width: 520px; height: 680px; background: #ffffff; border-radius: 14px; box-shadow: 0 12px 32px rgba(0,0,0,0.35); display: flex; flex-direction: column; overflow: hidden; }
+    
+    /* Cabeçalho */
+    .chat-header { background: #27272a; color: #ffffff; padding: 16px 20px; font-weight: 600; font-size: 1.1rem; display: flex; justify-content: space-between; align-items: center; }
+    .header-title { display: flex; align-items: center; gap: 10px; }
+    .status-dot { width: 9px; height: 9px; background: #22c55e; border-radius: 50%; }
+    .clear-btn { background: rgba(255,255,255,0.12); border: none; color: #e4e4e7; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; transition: background 0.2s; }
+    .clear-btn:hover { background: rgba(255,255,255,0.22); }
+
+    /* Área de Mensagens */
+    .chat-messages { flex: 1; padding: 18px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; background: #f4f4f5; }
+    .message { max-width: 82%; padding: 12px 15px; border-radius: 12px; font-size: 0.95rem; line-height: 1.45; word-wrap: break-word; white-space: pre-wrap; }
+    .bot-message { background: #e4e4e7; color: #18181b; align-self: flex-start; border-bottom-left-radius: 2px; }
+    .user-message { background: #2563eb; color: #ffffff; align-self: flex-end; border-bottom-right-radius: 2px; }
+    .error-message { background: #fee2e2; color: #991b1b; align-self: flex-start; font-size: 0.85rem; }
+    .message img { max-width: 100%; border-radius: 8px; margin-bottom: 6px; display: block; }
+
+    /* Preview da imagem anexada */
+    .image-preview-bar { display: none; padding: 8px 14px; background: #e4e4e7; border-top: 1px solid #d4d4d8; align-items: center; justify-content: space-between; font-size: 0.85rem; color: #3f3f46; }
+    .image-preview-bar.active { display: flex; }
+    .remove-img-btn { background: #ef4444; color: #fff; border: none; padding: 3px 8px; border-radius: 4px; cursor: pointer; font-size: 0.75rem; }
+
+    /* Input de Texto e Anexo */
+    .chat-input { display: flex; padding: 12px; background: #ffffff; border-top: 1px solid #e4e4e7; gap: 8px; align-items: center; }
+    .attach-btn { background: #f4f4f5; border: 1px solid #d4d4d8; color: #3f3f46; padding: 9px 12px; border-radius: 50%; cursor: pointer; font-size: 1rem; transition: background 0.2s; }
+    .attach-btn:hover { background: #e4e4e7; }
+    .chat-input input[type="text"] { flex: 1; padding: 10px 14px; border: 1px solid #d4d4d8; border-radius: 20px; outline: none; font-size: 0.95rem; }
+    .chat-input input[type="text"]:focus { border-color: #2563eb; }
+    .send-btn { background: #2563eb; color: #ffffff; border: none; padding: 10px 18px; border-radius: 20px; cursor: pointer; font-weight: 600; transition: background 0.2s; }
+    .send-btn:hover { background: #1d4ed8; }
+    .send-btn:disabled { background: #a1a1aa; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+
+<div class="chat-container">
+  <div class="chat-header">
+    <div class="header-title">
+      <div class="status-dot"></div>
+      <span>Potato AI</span>
+    </div>
+    <button class="clear-btn" id="clearChatBtn">Nova conversa</button>
+  </div>
+
+  <div class="chat-messages" id="chatMessages">
+    <div class="message bot-message">Olá! Como posso ajudar você hoje?</div>
+  </div>
+
+  <div class="image-preview-bar" id="imagePreviewBar">
+    <span id="imageName">Imagem selecionada</span>
+    <button class="remove-img-btn" id="removeImgBtn">Remover</button>
+  </div>
+
+  <form class="chat-input" id="chatForm">
+    <input type="file" id="imageInput" accept="image/*" hidden>
+    <button type="button" class="attach-btn" id="attachBtn" title="Enviar imagem">📎</button>
+    <input type="text" id="userInput" placeholder="Digite sua mensagem..." autocomplete="off">
+    <button type="submit" class="send-btn" id="sendBtn">Enviar</button>
+  </form>
+</div>
+
+<script>
+  // COLE AQUI A URL DO SEU GOOGLE APPS SCRIPT
+  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzvfDOjrfPN3HFKrCJn9yO3aWr3EtPaI4rmtAtcARbPVZjyNlJwuN-k43dGJP5nKcr9Ow/exec';
+
+  const chatForm = document.getElementById('chatForm');
+  const userInput = document.getElementById('userInput');
+  const sendBtn = document.getElementById('sendBtn');
+  const chatMessages = document.getElementById('chatMessages');
+  const clearChatBtn = document.getElementById('clearChatBtn');
+  const attachBtn = document.getElementById('attachBtn');
+  const imageInput = document.getElementById('imageInput');
+  const imagePreviewBar = document.getElementById('imagePreviewBar');
+  const imageName = document.getElementById('imageName');
+  const removeImgBtn = document.getElementById('removeImgBtn');
+
+  let chatHistory = [];
+  let selectedImageBase64 = null;
+  let selectedImageMimeType = null;
+
+  // Gerenciamento de anexo de imagem
+  attachBtn.addEventListener('click', () => imageInput.click());
+
+  imageInput.addEventListener('change', (e) => {
+    const file = e.target.files;
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      selectedImageMimeType = file.type;
+      selectedImageBase64 = reader.result.split(',');
+      imageName.textContent = `Imagem: ${file.name}`;
+      imagePreviewBar.classList.add('active');
+    };
+    reader.readAsDataURL(file);
+  });
+
+  removeImgBtn.addEventListener('click', clearImageSelection);
+
+  function clearImageSelection() {
+    selectedImageBase64 = null;
+    selectedImageMimeType = null;
+    imageInput.value = '';
+    imagePreviewBar.classList.remove('active');
+  }
+
+  clearChatBtn.addEventListener('click', () => {
+    chatHistory = [];
+    chatMessages.innerHTML = '<div class="message bot-message">Como posso ajudar?</div>';
+  });
+
+  function addMessage(text, type, imageUrl = null) {
+    const msgDiv = document.createElement('div');
+    msgDiv.classList.add('message');
+    if (type === 'user') msgDiv.classList.add('user-message');
+    else if (type === 'error') msgDiv.classList.add('error-message');
+    else msgDiv.classList.add('bot-message');
+
+    if (imageUrl) {
+      const img = document.createElement('img');
+      img.src = imageUrl;
+      msgDiv.appendChild(img);
+    }
+
+    if (text) {
+      const textNode = document.createElement('div');
+      textNode.textContent = text;
+      msgDiv.appendChild(textNode);
+    }
+
+    chatMessages.appendChild(msgDiv);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+    return msgDiv;
+  }
+
+  async function askGemini(prompt, imgBase64, imgMimeType) {
+    const parts = [];
+    if (prompt) parts.push({ text: prompt });
+    if (imgBase64 && imgMimeType) {
+      parts.push({
+        inlineData: {
+          mimeType: imgMimeType,
+          data: imgBase64
+        }
+      });
+    }
+
+    chatHistory.push({ role: 'user', parts: parts });
+
+    const response = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ contents: chatHistory })
+    });
+
+    const data = await response.json();
+
+    if (data.error) {
+      chatHistory.pop();
+      throw new Error(data.error.message || 'Erro na resposta da API.');
+    }
+
+    const replyText = data.candidates.content.parts.text;
+    chatHistory.push({ role: 'model', parts: [{ text: replyText }] });
+    return replyText;
+  }
+
+  chatForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const message = userInput.value.trim();
+    if (!message && !selectedImageBase64) return;
+
+    const previewUrl = selectedImageBase64 ? `data:${selectedImageMimeType};base64,${selectedImageBase64}` : null;
+    addMessage(message, 'user', previewUrl);
+
+    const currentImgBase64 = selectedImageBase64;
+    const currentImgMime = selectedImageMimeType;
+
+    userInput.value = '';
+    clearImageSelection();
+    userInput.disabled = true;
+    sendBtn.disabled = true;
+
+    const loadingMsg = addMessage('Digitando...', 'bot');
+
+    try {
+      const reply = await askGemini(message, currentImgBase64, currentImgMime);
+      loadingMsg.textContent = reply;
+    } catch (err) {
+      loadingMsg.remove();
+      addMessage(`Erro: ${err.message}`, 'error');
+    } finally {
+      userInput.disabled = false;
+      sendBtn.disabled = false;
+      userInput.focus();
+    }
+  });
+</script>
+
+</body>
+</html>
