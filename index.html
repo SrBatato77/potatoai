@@ -169,7 +169,12 @@
       throw new Error(data.error.message || 'Erro na resposta da API.');
     }
 
-    const replyText = data.candidates[0].content.parts[0].text;
+    const candidate = data.candidates && data.candidates[0];
+if (!candidate || !candidate.content || !candidate.content.parts) {
+  throw new Error('Resposta inesperada da API: ' + JSON.stringify(data));
+}
+const replyText = candidate.content.parts[0].text;
+
     chatHistory.push({ role: 'model', parts: [{ text: replyText }] });
     return replyText;
   }
